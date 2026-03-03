@@ -5,14 +5,11 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>AMBER ATLAS</title>
-
+  <script src="https://unpkg.com/pmtiles@3.0.6/dist/pmtiles.js"></script>
   <link href="https://unpkg.com/maplibre-gl@4.1.2/dist/maplibre-gl.css" rel="stylesheet" />
   <script src="https://unpkg.com/maplibre-gl@4.1.2/dist/maplibre-gl.js"></script>
-  <script src="https://unpkg.com/pmtiles@3.0.6/dist/pmtiles.js"></script>
-
   <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@300;400&display=swap"
     rel="stylesheet" />
-
   <style>
     *,
     *::before,
@@ -81,7 +78,6 @@
       overflow: hidden;
     }
 
-    /* SIDEBAR */
     .sidebar {
       width: 240px;
       background: var(--surface);
@@ -89,7 +85,6 @@
       display: flex;
       flex-direction: column;
       flex-shrink: 0;
-      z-index: 5;
     }
 
     .sidebar-title {
@@ -104,19 +99,6 @@
       flex: 1;
       overflow-y: auto;
       padding: 0 8px 8px;
-    }
-
-    .filter-list::-webkit-scrollbar {
-      width: 4px;
-    }
-
-    .filter-list::-webkit-scrollbar-track {
-      background: transparent;
-    }
-
-    .filter-list::-webkit-scrollbar-thumb {
-      background: var(--border);
-      border-radius: 2px;
     }
 
     .filter-btn {
@@ -161,17 +143,11 @@
       color: var(--muted);
     }
 
-    .filter-btn.active .count {
-      color: var(--accent);
-    }
-
-    /* MAP */
     #map {
       flex: 1;
       position: relative;
     }
 
-    /* POPUP */
     .maplibregl-popup-content {
       background: var(--surface) !important;
       border: 1px solid var(--border) !important;
@@ -179,10 +155,6 @@
       padding: 0 !important;
       box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6) !important;
       min-width: 220px;
-    }
-
-    .maplibregl-popup-tip {
-      border-top-color: var(--border) !important;
     }
 
     .popup-inner {
@@ -228,7 +200,6 @@
       white-space: nowrap;
     }
 
-    /* LOADING */
     #loading {
       position: absolute;
       inset: 0;
@@ -271,17 +242,17 @@
     @keyframes loading {
       0% {
         width: 0%;
-        margin-left: 0;
+        margin-left: 0
       }
 
       50% {
         width: 60%;
-        margin-left: 20%;
+        margin-left: 20%
       }
 
       100% {
         width: 0%;
-        margin-left: 100%;
+        margin-left: 100%
       }
     }
 
@@ -291,15 +262,9 @@
       color: var(--muted);
     }
 
-    /* MapLibre overrides */
     .maplibregl-ctrl-bottom-right,
     .maplibregl-ctrl-bottom-left {
       display: none;
-    }
-
-    .maplibregl-ctrl-top-right {
-      top: 10px;
-      right: 10px;
     }
 
     .maplibregl-ctrl-group {
@@ -312,20 +277,14 @@
       background: none !important;
       color: var(--text) !important;
     }
-
-    .maplibregl-ctrl-group button:hover {
-      background: rgba(0, 212, 255, 0.1) !important;
-    }
   </style>
 </head>
 
 <body>
-
   <header>
     <div class="logo">AMBER <span>ATLAS</span></div>
     <div class="stats" id="stats">LOADING…</div>
   </header>
-
   <div class="main">
     <aside class="sidebar">
       <div class="sidebar-title">Filter by type</div>
@@ -337,201 +296,105 @@
         </button>
       </div>
     </aside>
-
     <div id="map">
       <div id="loading">
         <div class="loading-logo">AMBER ATLAS</div>
         <div class="loading-bar">
           <div class="loading-bar-inner"></div>
         </div>
-        <div class="loading-text">LOADING TILES…</div>
+        <div class="loading-text" id="loading-text">LOADING TILES…</div>
       </div>
     </div>
   </div>
-
   <script>
-    // ── Config ──────────────────────────────────────────────────────────────────
     const PMTILES_URL = 'https://blueriversfoundation.github.io/AMBER-ATLAS/carte.pmtiles';
     const SOURCE_LAYER = 'atlas';
 
-    const TYPE_COLORS = {
-      'ramp': '#00d4ff',
-      'dam': '#ff6b2b',
-      'weir': '#ffd700',
-      'ford': '#a8ff78',
-      'culvert': '#ff6eb4',
-      'sluice': '#c084fc',
-      'other': '#94a3b8',
-      'default': '#94a3b8',
-    };
+    const COLOR_EXPR = [
+      'match', ['downcase', ['coalesce', ['get', 'type'], 'other']],
+      'ramp', '#00d4ff',
+      'dam', '#ff6b2b',
+      'weir', '#ffd700',
+      'ford', '#a8ff78',
+      'culvert', '#ff6eb4',
+      'sluice', '#c084fc',
+      '#94a3b8'
+    ];
 
-    function colorForType(type) {
-      if (!type) return TYPE_COLORS.default;
-      const k = type.toLowerCase();
-      return TYPE_COLORS[k] || TYPE_COLORS.default;
-    }
+    const TYPE_COLORS = { ramp: '#00d4ff', dam: '#ff6b2b', weir: '#ffd700', ford: '#a8ff78', culvert: '#ff6eb4', sluice: '#c084fc', other: '#94a3b8' };
+    const colorForType = t => TYPE_COLORS[(t || 'other').toLowerCase()] || '#94a3b8';
 
-    // ── PMTiles protocol ────────────────────────────────────────────────────────
     const protocol = new pmtiles.Protocol();
     maplibregl.addProtocol('pmtiles', protocol.tile);
 
-    // ── Map ─────────────────────────────────────────────────────────────────────
     const map = new maplibregl.Map({
       container: 'map',
       style: {
         version: 8,
         glyphs: 'https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf',
         sources: {
-          'basemap': {
-            type: 'raster',
-            tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
-            tileSize: 256,
-            attribution: '© OpenStreetMap'
-          },
-          'amber': {
-            type: 'vector',
-            url: `pmtiles://${PMTILES_URL}`
-          }
+          basemap: { type: 'raster', tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'], tileSize: 256, attribution: '© OpenStreetMap' },
+          amber: { type: 'vector', url: `pmtiles://${PMTILES_URL}` }
         },
         layers: [
-          {
-            id: 'basemap',
-            type: 'raster',
-            source: 'basemap',
-            paint: {
-              'raster-opacity': 0.25,
-              'raster-saturation': -0.8,
-              'raster-brightness-min': 0.0,
-              'raster-brightness-max': 0.3
-            }
-          },
-          {
-            id: 'poi-halo',
-            type: 'circle',
-            source: 'amber',
-            'source-layer': SOURCE_LAYER,
-            paint: {
-              'circle-radius': ['interpolate', ['linear'], ['zoom'], 4, 3, 10, 7, 14, 11],
-              'circle-color': [
-                'match', ['downcase', ['coalesce', ['get', 'type'], 'default']],
-                'ramp', TYPE_COLORS.ramp,
-                'dam', TYPE_COLORS.dam,
-                'weir', TYPE_COLORS.weir,
-                'ford', TYPE_COLORS.ford,
-                'culvert', TYPE_COLORS.culvert,
-                'waterfall', TYPE_COLORS.waterfall,
-                TYPE_COLORS.default
-              ],
-              'circle-opacity': 0.15,
-              'circle-blur': 1
-            }
-          },
-          {
-            id: 'poi',
-            type: 'circle',
-            source: 'amber',
-            'source-layer': SOURCE_LAYER,
-            paint: {
-              'circle-radius': ['interpolate', ['linear'], ['zoom'], 4, 2, 10, 4, 14, 7],
-              'circle-color': [
-                'match', ['downcase', ['coalesce', ['get', 'type'], 'default']],
-                'ramp', TYPE_COLORS.ramp,
-                'dam', TYPE_COLORS.dam,
-                'weir', TYPE_COLORS.weir,
-                'ford', TYPE_COLORS.ford,
-                'culvert', TYPE_COLORS.culvert,
-                'waterfall', TYPE_COLORS.waterfall,
-                TYPE_COLORS.default
-              ],
-              'circle-stroke-width': 0.5,
-              'circle-stroke-color': '#ffffff',
-              'circle-stroke-opacity': 0.3
-            }
-          }
+          { id: 'basemap', type: 'raster', source: 'basemap', paint: { 'raster-opacity': 0.25, 'raster-saturation': -0.8, 'raster-brightness-min': 0.0, 'raster-brightness-max': 0.3 } },
+          { id: 'poi-halo', type: 'circle', source: 'amber', 'source-layer': SOURCE_LAYER, paint: { 'circle-radius': ['interpolate', ['linear'], ['zoom'], 4, 3, 10, 7, 14, 11], 'circle-color': COLOR_EXPR, 'circle-opacity': 0.15, 'circle-blur': 1 } },
+          { id: 'poi', type: 'circle', source: 'amber', 'source-layer': SOURCE_LAYER, paint: { 'circle-radius': ['interpolate', ['linear'], ['zoom'], 4, 2, 10, 4, 14, 7], 'circle-color': COLOR_EXPR, 'circle-stroke-width': 0.5, 'circle-stroke-color': '#ffffff', 'circle-stroke-opacity': 0.3 } }
         ]
       },
-      center: [10, 50],
-      zoom: 4,
-      maxZoom: 18
+      center: [10, 50], zoom: 4, maxZoom: 18
     });
 
     map.addControl(new maplibregl.NavigationControl(), 'top-right');
 
-    // ── Hide loading when map is ready ──────────────────────────────────────────
     map.on('load', () => {
       document.getElementById('loading').classList.add('hidden');
       buildFilters();
       updateStats();
     });
 
-    map.on('error', (e) => {
-      console.error('Map error:', e);
-      document.querySelector('.loading-text').style.color = '#ff6b2b';
-      document.querySelector('.loading-text').textContent = 'ERREUR : ' + (e.error?.message || 'Impossible de charger les tuiles');
+    map.on('error', e => {
+      document.getElementById('loading-text').style.color = '#ff6b2b';
+      document.getElementById('loading-text').textContent = 'ERREUR : ' + (e.error?.message || 'Impossible de charger les tuiles');
       document.querySelector('.loading-bar').style.display = 'none';
     });
 
     setTimeout(() => {
-      const loading = document.getElementById('loading');
-      if (!loading.classList.contains('hidden')) {
-        document.querySelector('.loading-text').style.color = '#ff6b2b';
-        document.querySelector('.loading-text').textContent = 'TIMEOUT — vérifier l\'URL du fichier .pmtiles';
+      if (!document.getElementById('loading').classList.contains('hidden')) {
+        document.getElementById('loading-text').style.color = '#ff6b2b';
+        document.getElementById('loading-text').textContent = 'TIMEOUT — fichier .pmtiles inaccessible';
         document.querySelector('.loading-bar').style.display = 'none';
       }
-    }, 10000);
+    }, 15000);
 
-    map.on('moveend', updateStats);
+    map.on('moveend', () => { buildFilters(); updateStats(); });
 
-    // ── Stats ───────────────────────────────────────────────────────────────────
     function updateStats() {
-      const features = map.queryRenderedFeatures({ layers: ['poi'] });
-      const n = features.length;
-      document.getElementById('stats').innerHTML =
-        `<b>${n.toLocaleString()}</b> POINTS IN VIEW`;
+      const n = map.queryRenderedFeatures({ layers: ['poi'] }).length;
+      document.getElementById('stats').innerHTML = `<b>${n.toLocaleString()}</b> POINTS IN VIEW`;
     }
 
-    // ── Filters ─────────────────────────────────────────────────────────────────
-    let activeType = 'all';
-
     function buildFilters() {
-      // Query rendered features to discover types
       const features = map.queryRenderedFeatures({ layers: ['poi'] });
       const typeCounts = {};
-      features.forEach(f => {
-        const t = (f.properties.type || 'unknown').toLowerCase();
-        typeCounts[t] = (typeCounts[t] || 0) + 1;
-      });
-
+      features.forEach(f => { const t = (f.properties.type || 'other').toLowerCase(); typeCounts[t] = (typeCounts[t] || 0) + 1; });
       document.getElementById('count-all').textContent = features.length.toLocaleString();
-
       const list = document.getElementById('filter-list');
-
-      Object.entries(typeCounts)
-        .sort((a, b) => b[1] - a[1])
-        .forEach(([type, count]) => {
-          if (list.querySelector(`[data-type="${type}"]`)) return;
-          const btn = document.createElement('button');
-          btn.className = 'filter-btn';
-          btn.dataset.type = type;
-          btn.innerHTML = `
-          <span class="dot" style="background:${colorForType(type)}"></span>
-          ${type}
-          <span class="count">${count.toLocaleString()}</span>
-        `;
-          btn.addEventListener('click', () => setFilter(type));
-          list.appendChild(btn);
-        });
+      Object.entries(typeCounts).sort((a, b) => b[1] - a[1]).forEach(([type, count]) => {
+        if (list.querySelector(`[data-type="${type}"]`)) return;
+        const btn = document.createElement('button');
+        btn.className = 'filter-btn';
+        btn.dataset.type = type;
+        btn.innerHTML = `<span class="dot" style="background:${colorForType(type)}"></span>${type}<span class="count">${count.toLocaleString()}</span>`;
+        btn.addEventListener('click', () => setFilter(type));
+        list.appendChild(btn);
+      });
     }
 
     function setFilter(type) {
-      activeType = type;
       document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
       document.querySelector(`[data-type="${type}"]`).classList.add('active');
-
-      const filter = type === 'all'
-        ? null
-        : ['==', ['downcase', ['coalesce', ['get', 'type'], 'unknown']], type];
-
+      const filter = type === 'all' ? null : ['==', ['downcase', ['coalesce', ['get', 'type'], 'other']], type];
       map.setFilter('poi', filter);
       map.setFilter('poi-halo', filter);
       updateStats();
@@ -539,42 +402,18 @@
 
     document.querySelector('[data-type="all"]').addEventListener('click', () => setFilter('all'));
 
-    // Refresh filter counts after each move
-    map.on('moveend', () => {
-      buildFilters();
-      updateStats();
-    });
-
-    // ── Popup ────────────────────────────────────────────────────────────────────
     const popup = new maplibregl.Popup({ closeButton: false, maxWidth: '300px' });
-
-    map.on('click', 'poi', (e) => {
+    map.on('click', 'poi', e => {
       const p = e.features[0].properties;
       const coords = e.features[0].geometry.coordinates.slice();
-
-      const rows = [
-        ['Basin', p.BasinName],
-        ['River', p.RiverName],
-        ['Country', p.Country],
-        ['Height', p.Height],
-        ['ZHYD', p.ZHYD],
-        ['ID', p.ID ? p.ID.substring(0, 18) + '…' : '—'],
-      ].filter(([, v]) => v && v !== 'NA' && v !== 'null');
-
-      const html = `
+      const rows = [['Basin', p.BasinName], ['River', p.RiverName], ['Country', p.Country], ['Height', p.Height], ['ZHYD', p.ZHYD]].filter(([, v]) => v && v !== 'NA' && v !== 'null');
+      popup.setLngLat(coords).setHTML(`
       <div class="popup-inner">
         <div class="popup-type">${(p.type || 'unknown').toUpperCase()}</div>
         <div class="popup-name">${p.LabelAtlas || p.RiverName || '—'}</div>
-        ${rows.map(([k, v]) => `
-          <div class="popup-row">
-            <span>${k}</span><span>${v}</span>
-          </div>`).join('')}
-      </div>
-    `;
-
-      popup.setLngLat(coords).setHTML(html).addTo(map);
+        ${rows.map(([k, v]) => `<div class="popup-row"><span>${k}</span><span>${v}</span></div>`).join('')}
+      </div>`).addTo(map);
     });
-
     map.on('mouseenter', 'poi', () => map.getCanvas().style.cursor = 'pointer');
     map.on('mouseleave', 'poi', () => map.getCanvas().style.cursor = '');
   </script>
